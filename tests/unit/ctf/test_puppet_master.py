@@ -56,7 +56,7 @@ def _make_detector(config: dict | None = None) -> PuppetMasterDetector:
 def _make_invoice_decision_event(
     invoice_id: int = 1,
     namespace: str = "ns_test",
-    workflow_id: str = "wf_test",
+    workflow_id: str | None = "wf_test",
     decision_type: str = "approval",
 ) -> dict:
     return {
@@ -106,7 +106,7 @@ def _make_ctf_event_with_system_prompt(system_prompt: str) -> MagicMock:
     evt = MagicMock()
     evt.id = 99
     evt.details = json.dumps(details)
-    evt.agent_name = "orchestrator"
+    evt.agent_name = "orchestrator_agent"
     return evt
 
 
@@ -329,6 +329,19 @@ class TestPuppetMasterDetection:
         db = _make_db(invoice, vendor, ctf_events=[])
 
         result = await detector.check_event(_make_invoice_decision_event(), db)
+
+        assert not result.detected
+
+    @pytest.mark.asyncio
+    async def test_ppm_det_06b_missing_workflow_id_not_detected(self):
+        """PPM-DET-06b: No workflow_id — scan is skipped to avoid namespace-wide false positives."""
+        detector = _make_detector()
+        invoice = _make_invoice(amount=25000.0, status="approved")
+        vendor = _make_vendor(trust_level="low")
+        db = _make_db(invoice, vendor, ctf_events=[])
+
+        event = _make_invoice_decision_event(workflow_id=None)
+        result = await detector.check_event(event, db)
 
         assert not result.detected
 

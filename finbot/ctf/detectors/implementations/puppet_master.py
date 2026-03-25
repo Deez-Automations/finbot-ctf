@@ -162,26 +162,36 @@ class PuppetMasterDetector(BaseDetector):
             },
         )
 
+    # Matches the agent_name emitted by OrchestratorAgent at runtime.
+    _ORCHESTRATOR_AGENT_NAME = "orchestrator_agent"
+
     def _find_override_in_workflow(
         self, namespace: str, workflow_id: str | None, db: Session
     ) -> tuple[bool, str]:
         """Scan stored orchestrator LLM events for the config injection marker.
 
-        Queries CTFEvent records for this workflow and looks for the OVERRIDE string
-        that only appears when custom_goals is injected without validation. Falls back
-        to a namespace-wide scan when workflow_id is absent.
+        Requires workflow_id — without it we can't scope the scan safely and
+        return not-detected to avoid false positives on large namespaces.
         """
+        if not workflow_id:
+            logger.debug(
+                "PuppetMasterDetector: no workflow_id, skipping system prompt scan"
+            )
+            return False, ""
+
         override_marker = self.config.get("override_marker", DEFAULT_OVERRIDE_MARKER)
+        agent_name = self.config.get("agent_name", self._ORCHESTRATOR_AGENT_NAME)
 
-        query = db.query(CTFEvent).filter(
-            CTFEvent.namespace == namespace,
-            CTFEvent.event_type.like("%llm_request_success%"),
-            CTFEvent.agent_name == "orchestrator",
-        )
-        if workflow_id:
-            query = query.filter(CTFEvent.workflow_id == workflow_id)
-
-        for ctf_event in query.all():
+        for ctf_event in (
+            db.query(CTFEvent)
+            .filter(
+                CTFEvent.namespace == namespace,
+                CTFEvent.workflow_id == workflow_id,
+                CTFEvent.event_type.like("%llm_request_success%"),
+                CTFEvent.agent_name == agent_name,
+            )
+            .all()
+        ):
             if not ctf_event.details:
                 continue
             try:
