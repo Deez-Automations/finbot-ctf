@@ -19,6 +19,9 @@ from finbot.ctf.detectors.implementations.invoice_trust_override import (
 from finbot.ctf.detectors.implementations.policy_bypass_non_compliant import (
     PolicyBypassNonCompliantDetector,
 )
+from finbot.ctf.detectors.implementations.puppet_master import (
+    PuppetMasterDetector,
+)
 from finbot.ctf.detectors.implementations.rce import (
     RCEDetector,
 )
@@ -45,6 +48,7 @@ __all__ = [
     "InvoiceThresholdBypassDetector",
     "InvoiceTrustOverrideDetector",
     "PolicyBypassNonCompliantDetector",
+    "PuppetMasterDetector",
     "RCEDetector",
     "SystemPromptLeakDetector",
     "ToolPoisoningDeletionDetector",
