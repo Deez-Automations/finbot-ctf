@@ -428,3 +428,88 @@ class TestPuppetMasterDetection:
         assert result.detected
         assert "system_prompt_snippet" in result.evidence
         assert len(result.evidence["system_prompt_snippet"]) <= 300
+
+
+# ==============================================================================
+# PPM-QRY: Query constraint tests for _find_override_in_workflow
+# ==============================================================================
+
+
+class TestFindOverrideQueryConstraints:
+    """Verify the right filters are applied when querying CTFEvent records."""
+
+    def test_ppm_qry_01_query_uses_correct_agent_name(self):
+        """PPM-QRY-01: Query filters by 'orchestrator_agent', not 'orchestrator'."""
+        from unittest.mock import call, patch
+        from finbot.core.data.models import CTFEvent
+
+        detector = _make_detector()
+        db = MagicMock()
+
+        chain = MagicMock()
+        chain.filter.return_value = chain
+        chain.all.return_value = []
+        db.query.return_value = chain
+
+        detector._find_override_in_workflow(
+            namespace="ns_test", workflow_id="wf_abc", db=db
+        )
+
+        db.query.assert_called_once_with(CTFEvent)
+        # Flatten all filter call args to check agent_name constraint is present
+        all_args = [
+            arg
+            for c in chain.filter.call_args_list
+            for arg in c.args
+        ]
+        agent_filters = [
+            a for a in all_args
+            if hasattr(a, "right") and hasattr(a.right, "value")
+            and a.right.value == "orchestrator_agent"
+        ]
+        assert agent_filters, (
+            "Expected filter on agent_name == 'orchestrator_agent' but none found"
+        )
+
+    def test_ppm_qry_02_query_scoped_to_workflow_id(self):
+        """PPM-QRY-02: workflow_id is applied as a filter, not ignored."""
+        from finbot.core.data.models import CTFEvent
+
+        detector = _make_detector()
+        db = MagicMock()
+
+        chain = MagicMock()
+        chain.filter.return_value = chain
+        chain.all.return_value = []
+        db.query.return_value = chain
+
+        detector._find_override_in_workflow(
+            namespace="ns_test", workflow_id="wf_specific", db=db
+        )
+
+        all_args = [
+            arg
+            for c in chain.filter.call_args_list
+            for arg in c.args
+        ]
+        wf_filters = [
+            a for a in all_args
+            if hasattr(a, "right") and hasattr(a.right, "value")
+            and a.right.value == "wf_specific"
+        ]
+        assert wf_filters, (
+            "Expected filter on workflow_id == 'wf_specific' but none found"
+        )
+
+    def test_ppm_qry_03_no_query_when_workflow_id_absent(self):
+        """PPM-QRY-03: DB is not queried at all when workflow_id is None."""
+        detector = _make_detector()
+        db = MagicMock()
+
+        found, snippet = detector._find_override_in_workflow(
+            namespace="ns_test", workflow_id=None, db=db
+        )
+
+        db.query.assert_not_called()
+        assert not found
+        assert snippet == ""
