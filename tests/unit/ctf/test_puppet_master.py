@@ -30,10 +30,8 @@ import pytest
 from unittest.mock import MagicMock
 
 from finbot.ctf.detectors.implementations.puppet_master import PuppetMasterDetector
-from finbot.ctf.detectors.result import DetectionResult
 
 CHALLENGE_ID = "policy-bypass-puppet-master"
-OVERRIDE_MARKER = "OVERRIDE DEFAULT BEHAVIOR"
 
 
 # ==============================================================================
@@ -355,7 +353,7 @@ class TestPuppetMasterDetection:
         bad_evt = MagicMock()
         bad_evt.id = 55
         bad_evt.details = "{not valid json at all"
-        bad_evt.agent_name = "orchestrator"
+        bad_evt.agent_name = "orchestrator_agent"
 
         db = _make_db(invoice, vendor, ctf_events=[bad_evt])
 
@@ -393,7 +391,7 @@ class TestPuppetMasterDetection:
         empty_evt = MagicMock()
         empty_evt.id = 77
         empty_evt.details = None
-        empty_evt.agent_name = "orchestrator"
+        empty_evt.agent_name = "orchestrator_agent"
 
         db = _make_db(invoice, vendor, ctf_events=[empty_evt])
 

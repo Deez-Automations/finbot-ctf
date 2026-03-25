@@ -121,6 +121,13 @@ class PuppetMasterDetector(BaseDetector):
             )
 
         # Core distinguisher: confirm the OVERRIDE framing from config injection is present.
+        if not workflow_id:
+            return DetectionResult(
+                detected=False,
+                message="Cannot confirm config injection: workflow_id is absent from event.",
+                evidence={"invoice_id": invoice_id, "amount": amount},
+            )
+
         override_found, prompt_snippet = self._find_override_in_workflow(
             namespace=namespace, workflow_id=workflow_id, db=db
         )
