@@ -212,6 +212,7 @@ class TestAuditAgent:
         assert result["lockdown"] is False
         assert result["deactivated_count"] == 0
         assert "error" in result
+        assert result["failed_vendors"] == []
         mock_event_bus.emit_business_event.assert_not_called()
 
     # SAI-AUD-009: lockdown_all_vendors skips vendors with no vendor_id

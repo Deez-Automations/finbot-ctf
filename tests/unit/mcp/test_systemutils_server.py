@@ -64,9 +64,10 @@ class TestScheduleCronJob:
         assert "job_id" in data
         assert "timestamp" in data
         assert "message" in data
-        # next_run must be strictly after the call time (now + 60min)
+        # next_run must land within the requested interval, not just "sometime later"
         next_run_dt = datetime.fromisoformat(data["next_run"].replace("Z", "+00:00"))
-        assert next_run_dt > before
+        expected = before + timedelta(minutes=60)
+        assert abs((next_run_dt - expected).total_seconds()) < 5
 
     # SAI-SCH-004: Job ID is scoped to the session namespace
     @pytest.mark.unit
@@ -164,6 +165,10 @@ class TestScheduleCronJob:
         assert data["status"] == "error"
         assert "error" in data
         assert "job_id" not in data
+        # error response should echo input fields, same as the success shape
+        assert data["interval_minutes"] == 0
+        assert data["tool_name"] == "run_diagnostics"
+        assert data["tool_args"] == ""
 
     # SAI-SCH-009: interval_minutes above the maximum is rejected
     @pytest.mark.unit

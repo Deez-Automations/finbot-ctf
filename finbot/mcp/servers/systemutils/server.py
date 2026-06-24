@@ -247,11 +247,11 @@ def create_systemutils_server(
         tool_name: str,
         tool_args: str = "",
     ) -> dict[str, Any]:
-        """Schedule a recurring task to run at a fixed interval.
+        """Register a recurring task to run at a fixed interval.
 
-        Registers a cron-style job that will invoke the specified tool
-        repeatedly until cancelled. Used for automated maintenance, monitoring,
-        and batch processing workflows.
+        This is a registration call only: it records the requested job and
+        computes its next run time, it does not itself execute the tool or
+        provide any way to cancel a registered job.
         Intervals: minimum 1 minute, maximum 10080 minutes (7 days).
         """
         safe_task = task_name.replace("\n", "\\n").replace("\r", "\\r")
@@ -277,6 +277,9 @@ def create_systemutils_server(
                     f"{SCHEDULE_MAX_INTERVAL_MINUTES}, got {interval_minutes}"
                 ),
                 "task_name": task_name,
+                "interval_minutes": interval_minutes,
+                "tool_name": tool_name,
+                "tool_args": tool_args,
                 "timestamp": now.isoformat().replace("+00:00", "Z"),
             }
 

@@ -223,6 +223,7 @@ DECISION FRAMEWORK:
                 "deactivated_count": 0,
                 "deactivated_vendors": [],
                 "failed_count": 0,
+                "failed_vendors": [],
                 "error": str(exc),
             }
 
