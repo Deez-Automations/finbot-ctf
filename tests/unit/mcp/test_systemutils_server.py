@@ -144,3 +144,99 @@ class TestScheduleCronJob:
         data = result.structured_content
         assert "backup_sweep" in data["message"]
         assert "120" in data["message"]
+
+    # SAI-SCH-008: interval_minutes below the minimum is rejected
+    @pytest.mark.unit
+    def test_sai_sch_008_rejects_interval_below_minimum(self):
+        ctx = _make_session()
+        mcp = create_systemutils_server(ctx)
+        result = asyncio.run(
+            mcp.call_tool(
+                "schedule_cron_job",
+                {
+                    "task_name": "too_frequent",
+                    "interval_minutes": 0,
+                    "tool_name": "run_diagnostics",
+                },
+            )
+        )
+        data = result.structured_content
+        assert data["status"] == "error"
+        assert "error" in data
+        assert "job_id" not in data
+
+    # SAI-SCH-009: interval_minutes above the maximum is rejected
+    @pytest.mark.unit
+    def test_sai_sch_009_rejects_interval_above_maximum(self):
+        ctx = _make_session()
+        mcp = create_systemutils_server(ctx)
+        result = asyncio.run(
+            mcp.call_tool(
+                "schedule_cron_job",
+                {
+                    "task_name": "too_infrequent",
+                    "interval_minutes": 10081,
+                    "tool_name": "run_diagnostics",
+                },
+            )
+        )
+        data = result.structured_content
+        assert data["status"] == "error"
+        assert "error" in data
+        assert "job_id" not in data
+
+    # SAI-SCH-010: negative interval_minutes is rejected
+    @pytest.mark.unit
+    def test_sai_sch_010_rejects_negative_interval(self):
+        ctx = _make_session()
+        mcp = create_systemutils_server(ctx)
+        result = asyncio.run(
+            mcp.call_tool(
+                "schedule_cron_job",
+                {
+                    "task_name": "negative_interval",
+                    "interval_minutes": -30,
+                    "tool_name": "run_diagnostics",
+                },
+            )
+        )
+        data = result.structured_content
+        assert data["status"] == "error"
+
+    # SAI-SCH-011: boundary values 1 and 10080 are accepted
+    @pytest.mark.unit
+    def test_sai_sch_011_accepts_boundary_values(self):
+        ctx = _make_session()
+        mcp = create_systemutils_server(ctx)
+        for boundary in (1, 10080):
+            result = asyncio.run(
+                mcp.call_tool(
+                    "schedule_cron_job",
+                    {
+                        "task_name": f"boundary_{boundary}",
+                        "interval_minutes": boundary,
+                        "tool_name": "run_diagnostics",
+                    },
+                )
+            )
+            data = result.structured_content
+            assert data["status"] == "scheduled"
+
+    # SAI-SCH-012: newlines in task_name/tool_name are sanitized out of the user-facing message
+    @pytest.mark.unit
+    def test_sai_sch_012_message_sanitizes_newlines(self):
+        ctx = _make_session()
+        mcp = create_systemutils_server(ctx)
+        result = asyncio.run(
+            mcp.call_tool(
+                "schedule_cron_job",
+                {
+                    "task_name": "evil\ntask",
+                    "interval_minutes": 10,
+                    "tool_name": "run_diagnostics\nrm -rf /",
+                },
+            )
+        )
+        data = result.structured_content
+        assert "\n" not in data["message"]
+        assert "\\n" in data["message"]

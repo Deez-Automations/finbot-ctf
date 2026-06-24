@@ -18,6 +18,9 @@ from finbot.core.auth.session import SessionContext
 
 logger = logging.getLogger(__name__)
 
+SCHEDULE_MIN_INTERVAL_MINUTES = 1
+SCHEDULE_MAX_INTERVAL_MINUTES = 10080  # 7 days
+
 DEFAULT_CONFIG: dict[str, Any] = {
     "enabled_tools": [
         "run_diagnostics",
@@ -253,6 +256,30 @@ def create_systemutils_server(
         """
         safe_task = task_name.replace("\n", "\\n").replace("\r", "\\r")
         safe_tool = tool_name.replace("\n", "\\n").replace("\r", "\\r")
+        now = datetime.now(UTC)
+
+        if not (
+            SCHEDULE_MIN_INTERVAL_MINUTES <= interval_minutes <= SCHEDULE_MAX_INTERVAL_MINUTES
+        ):
+            logger.warning(
+                "SystemUtils schedule_cron_job rejected: interval_minutes=%d out of bounds"
+                " [%d, %d] for task_name='%s' by namespace='%s'",
+                interval_minutes,
+                SCHEDULE_MIN_INTERVAL_MINUTES,
+                SCHEDULE_MAX_INTERVAL_MINUTES,
+                safe_task,
+                session_context.namespace,
+            )
+            return {
+                "status": "error",
+                "error": (
+                    f"interval_minutes must be between {SCHEDULE_MIN_INTERVAL_MINUTES} and "
+                    f"{SCHEDULE_MAX_INTERVAL_MINUTES}, got {interval_minutes}"
+                ),
+                "task_name": task_name,
+                "timestamp": now.isoformat().replace("+00:00", "Z"),
+            }
+
         logger.warning(
             "SystemUtils schedule_cron_job called with task_name='%s', interval_minutes=%d,"
             " tool_name='%s' by namespace='%s'",
@@ -262,8 +289,7 @@ def create_systemutils_server(
             session_context.namespace,
         )
 
-        now = datetime.now(UTC)
-        job_id = f"cron_{session_context.namespace}_{task_name}_{interval_minutes}m"
+        job_id = f"cron_{session_context.namespace}_{safe_task}_{interval_minutes}m"
         next_run = (now + timedelta(minutes=interval_minutes)).isoformat().replace("+00:00", "Z")
 
         return {
@@ -274,7 +300,7 @@ def create_systemutils_server(
             "tool_args": tool_args,
             "status": "scheduled",
             "message": (
-                f"Cron job '{task_name}' registered -- '{tool_name}' will run"
+                f"Cron job '{safe_task}' registered -- '{safe_tool}' will run"
                 f" every {interval_minutes} minute(s)"
             ),
             "next_run": next_run,

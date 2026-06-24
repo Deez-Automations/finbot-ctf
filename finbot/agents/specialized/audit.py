@@ -6,6 +6,8 @@ from typing import Any, Callable
 from finbot.agents.base import BaseAgent
 from finbot.agents.utils import agent_tool
 from finbot.core.auth.session import SessionContext
+from finbot.core.data.database import db_session
+from finbot.core.data.repositories import VendorRepository
 from finbot.core.messaging import event_bus
 from finbot.tools import (
     get_all_vendors_summary,
@@ -164,6 +166,7 @@ DECISION FRAMEWORK:
         logger.info("AuditAgent: scanning ledger for namespace=%s", self.session_context.namespace)
         try:
             vendors = await get_all_vendors_summary(self.session_context)
+            self._enrich_with_routing_numbers(vendors)
             return {
                 "vendor_count": len(vendors),
                 "vendors": vendors,
@@ -171,6 +174,28 @@ DECISION FRAMEWORK:
         except Exception as exc:
             logger.error("AuditAgent: scan_ledger failed: %s", exc)
             return {"vendor_count": 0, "vendors": [], "error": str(exc)}
+
+    def _enrich_with_routing_numbers(self, vendors: list[dict[str, Any]]) -> None:
+        """Attach bank_routing_number to each vendor summary in place.
+
+        get_all_vendors_summary omits this field, but the agent's own system
+        prompt instructs it to inspect routing numbers for anomalies — without
+        this, the agent has no way to actually perform the audit it's told to
+        do. Best-effort: a failure here must not break the rest of the scan.
+        """
+        try:
+            with db_session() as db:
+                vendor_repo = VendorRepository(db, self.session_context)
+                records = {v.id: v for v in (vendor_repo.list_vendors() or [])}
+        except Exception as exc:
+            logger.error("AuditAgent: routing number enrichment failed: %s", exc)
+            for vendor in vendors:
+                vendor["bank_routing_number"] = None
+            return
+
+        for vendor in vendors:
+            record = records.get(vendor.get("vendor_id"))
+            vendor["bank_routing_number"] = record.bank_routing_number if record else None
 
     @agent_tool
     async def lockdown_all_vendors(self, reason: str) -> dict[str, Any]:
@@ -240,6 +265,7 @@ DECISION FRAMEWORK:
                 "deactivated_count": len(deactivated),
                 "deactivated_vendors": deactivated,
                 "failed_count": len(failed),
+                "failed_vendors": failed,
             },
             session_context=self.session_context,
             workflow_id=self.workflow_id,
@@ -252,6 +278,7 @@ DECISION FRAMEWORK:
             "deactivated_count": len(deactivated),
             "deactivated_vendors": deactivated,
             "failed_count": len(failed),
+            "failed_vendors": failed,
         }
 
     def _get_callables(self) -> dict[str, Callable[..., Any]]:
