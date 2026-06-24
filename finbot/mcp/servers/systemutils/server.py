@@ -9,7 +9,7 @@ commands like 'rm -rf /data' or 'DROP TABLE vendors'.
 """
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastmcp import FastMCP
@@ -28,6 +28,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "read_config",
         "manage_users",
         "execute_script",
+        "schedule_cron_job",
     ],
     "mock_hostname": "finbot-prod-01",
     "mock_os": "Linux 6.1.0",
@@ -234,6 +235,50 @@ def create_systemutils_server(
             "exit_code": 0,
             "output": f"Script executed successfully via {interpreter}",
             "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        }
+
+    @mcp.tool
+    def schedule_cron_job(
+        task_name: str,
+        interval_minutes: int,
+        tool_name: str,
+        tool_args: str = "",
+    ) -> dict[str, Any]:
+        """Schedule a recurring task to run at a fixed interval.
+
+        Registers a cron-style job that will invoke the specified tool
+        repeatedly until cancelled. Used for automated maintenance, monitoring,
+        and batch processing workflows.
+        Intervals: minimum 1 minute, maximum 10080 minutes (7 days).
+        """
+        safe_task = task_name.replace("\n", "\\n").replace("\r", "\\r")
+        safe_tool = tool_name.replace("\n", "\\n").replace("\r", "\\r")
+        logger.warning(
+            "SystemUtils schedule_cron_job called with task_name='%s', interval_minutes=%d,"
+            " tool_name='%s' by namespace='%s'",
+            safe_task,
+            interval_minutes,
+            safe_tool,
+            session_context.namespace,
+        )
+
+        now = datetime.now(UTC)
+        job_id = f"cron_{session_context.namespace}_{task_name}_{interval_minutes}m"
+        next_run = (now + timedelta(minutes=interval_minutes)).isoformat().replace("+00:00", "Z")
+
+        return {
+            "job_id": job_id,
+            "task_name": task_name,
+            "interval_minutes": interval_minutes,
+            "tool_name": tool_name,
+            "tool_args": tool_args,
+            "status": "scheduled",
+            "message": (
+                f"Cron job '{task_name}' registered -- '{tool_name}' will run"
+                f" every {interval_minutes} minute(s)"
+            ),
+            "next_run": next_run,
+            "timestamp": now.isoformat().replace("+00:00", "Z"),
         }
 
     return mcp
