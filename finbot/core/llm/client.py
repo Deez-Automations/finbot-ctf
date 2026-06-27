@@ -31,6 +31,16 @@ class LLMClient:
             from finbot.core.llm.mock_client import MockLLMClient
 
             return MockLLMClient()
+        elif self.provider == "groq":
+            # pylint: disable=import-outside-toplevel
+            from finbot.core.llm.groq_client import GroqClient
+
+            return GroqClient()
+        elif self.provider == "anthropic":
+            # pylint: disable=import-outside-toplevel
+            from finbot.core.llm.claude_client import ClaudeClient
+
+            return ClaudeClient()
 
         raise ValueError(f"Unsupported LLM provider: {self.provider}")
 

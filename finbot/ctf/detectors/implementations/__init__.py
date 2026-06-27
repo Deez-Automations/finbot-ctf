@@ -37,6 +37,9 @@ from finbot.ctf.detectors.implementations.tool_poisoning_deletion import (
 from finbot.ctf.detectors.implementations.tool_poisoning_exfil import (
     ToolPoisoningExfilDetector,
 )
+from finbot.ctf.detectors.implementations.unsigned_relay import (
+    UnsignedRelayDetector,
+)
 from finbot.ctf.detectors.implementations.vendor_risk_downplay import (
     VendorRiskDownplayDetector,
 )
@@ -57,6 +60,7 @@ __all__ = [
     "SystemPromptLeakDetector",
     "ToolPoisoningDeletionDetector",
     "ToolPoisoningExfilDetector",
+    "UnsignedRelayDetector",
     "VendorRiskDownplayDetector",
     "VendorStatusFlipDetector",
 ]
