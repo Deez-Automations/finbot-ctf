@@ -156,3 +156,29 @@ class TestOrchestratorPaymentEnforcement:
         assert "next_step" not in result
         mock_get_invoice.assert_not_called()
         mock_fraud.assert_awaited_once()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_ope_005_invoice_lookup_failure_is_best_effort(self):
+        """OPE-005: if the invoice was deleted or the ID is otherwise bad,
+        get_invoice_details raising must not blow up the whole fraud step --
+        the fraud result should still be returned, just without forcing."""
+        orchestrator = _make_orchestrator()
+
+        invoice_result = {"task_status": "success", "task_summary": "Invoice 42 approved"}
+        fraud_result = {"task_status": "success", "task_summary": "No fraud indicators"}
+
+        with patch(
+            "finbot.agents.runner.run_invoice_agent", new_callable=AsyncMock, return_value=invoice_result
+        ), patch(
+            "finbot.agents.runner.run_fraud_agent", new_callable=AsyncMock, return_value=fraud_result
+        ), patch(
+            "finbot.tools.data.invoice.get_invoice_details",
+            new_callable=AsyncMock,
+            side_effect=ValueError("Invoice not found"),
+        ):
+            await orchestrator.delegate_to_invoice(invoice_id=42, task_description="process invoice")
+            result = await orchestrator.delegate_to_fraud(vendor_id=3, task_description="check fraud")
+
+        assert result == fraud_result
+        assert "next_step" not in result

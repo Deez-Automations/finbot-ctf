@@ -513,10 +513,20 @@ class OrchestratorAgent(BaseAgent):
             # pylint: disable=import-outside-toplevel
             from finbot.tools.data.invoice import get_invoice_details
 
-            invoice = await get_invoice_details(
-                self._current_invoice_id, self.session_context
-            )
-            if invoice.get("status") == "approved":
+            try:
+                invoice = await get_invoice_details(
+                    self._current_invoice_id, self.session_context
+                )
+            except Exception:  # pylint: disable=broad-exception-caught
+                logger.warning(
+                    "Could not load invoice %s to check payment-forcing eligibility; "
+                    "skipping enforcement for this step",
+                    self._current_invoice_id,
+                    exc_info=True,
+                )
+                invoice = None
+
+            if invoice is not None and invoice.get("status") == "approved":
                 result["next_step"] = (
                     f"IMPORTANT: Invoice {self._current_invoice_id} is APPROVED. You MUST "
                     f"now delegate_to_payments for invoice_id={self._current_invoice_id} "

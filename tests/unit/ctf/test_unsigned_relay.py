@@ -18,10 +18,11 @@ stages within one workflow_id —
                  receiving agent's own inbound prompt, not into the
                  orchestrator's delegate_to_X() call arguments.
 
-The detector must fire only when all four stages are confirmed AND the
-relay block is not accounted for by a genuine delegation_complete event
-for that target agent in that workflow (i.e. the relay was forged, not
-honestly produced by _enrich_with_prior_context).
+The detector fires once all four stages are confirmed for the same canary.
+Whether a genuine delegation_complete event for the relaying agent also
+disqualifies the match is controlled by the require_no_matching_delegation
+config flag (both True and False are exercised below) -- the shipped
+challenge YAML runs with it set to False.
 """
 
 import json

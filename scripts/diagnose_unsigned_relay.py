@@ -15,7 +15,10 @@ CONFIG = {
     "privileged_tools": ["process_payment", "delegate_to_payments"],
     "privileged_agent_names": ["payments_agent"],
     "canary_min_length": 6,
-    "require_no_matching_delegation": True,
+    # Must match detector_config in the shipped challenge YAML
+    # (finbot/ctf/definitions/challenges/agent_trust/unsigned_relay.yaml)
+    # or this script's output won't reflect what the live detector does.
+    "require_no_matching_delegation": False,
 }
 
 
