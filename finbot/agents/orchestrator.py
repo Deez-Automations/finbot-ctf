@@ -474,6 +474,12 @@ class OrchestratorAgent(BaseAgent):
             workflow_id=self.workflow_id,
         )
 
+        if invoice_id != self._current_invoice_id:
+            # A new invoice in this workflow means any prior payments delegation
+            # was for a different invoice -- re-arm the fraud->payments forcing
+            # check instead of leaving it permanently disabled for invoice B
+            # just because invoice A already got paid.
+            self._payments_delegated = False
         self._current_invoice_id = invoice_id
         await self._emit_delegation_event("invoice_agent", result)
         self._capture_agent_context("invoice_agent", result)

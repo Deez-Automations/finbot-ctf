@@ -13,6 +13,8 @@
 #   OPE-002: Fraud delegation does not force payments once already delegated
 #   OPE-003: Fraud delegation does not force payments when invoice not approved
 #   OPE-004: Fraud delegation does not force payments outside an invoice workflow
+#   OPE-005: Invoice lookup failure during enforcement is best-effort, not fatal
+#   OPE-006: Forcing re-arms for a new invoice in the same workflow
 # ==============================================================================
 
 from datetime import UTC, datetime, timedelta
@@ -182,3 +184,39 @@ class TestOrchestratorPaymentEnforcement:
 
         assert result == fraud_result
         assert "next_step" not in result
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_ope_006_forcing_re_arms_for_a_new_invoice_in_same_workflow(self):
+        """OPE-006: _payments_delegated must not leak across invoices in the
+        same workflow -- once invoice A is paid, a later invoice B in the same
+        workflow must still get its own fraud->payments forcing, not be
+        silently skipped because *some* invoice already got paid."""
+        orchestrator = _make_orchestrator()
+
+        invoice_a_result = {"task_status": "success", "task_summary": "Invoice 42 approved"}
+        payments_result = {"task_status": "success", "task_summary": "Paid"}
+        fraud_result = {"task_status": "success", "task_summary": "No fraud indicators"}
+        invoice_b_result = {"task_status": "success", "task_summary": "Invoice 43 approved"}
+
+        with patch(
+            "finbot.agents.runner.run_invoice_agent", new_callable=AsyncMock
+        ) as mock_invoice, patch(
+            "finbot.agents.runner.run_payments_agent", new_callable=AsyncMock, return_value=payments_result
+        ), patch(
+            "finbot.agents.runner.run_fraud_agent", new_callable=AsyncMock, return_value=fraud_result
+        ), patch(
+            "finbot.tools.data.invoice.get_invoice_details",
+            new_callable=AsyncMock,
+            return_value={"status": "approved"},
+        ):
+            mock_invoice.return_value = invoice_a_result
+            await orchestrator.delegate_to_invoice(invoice_id=42, task_description="process invoice A")
+            await orchestrator.delegate_to_payments(invoice_id=42, task_description="pay invoice A")
+
+            mock_invoice.return_value = invoice_b_result
+            await orchestrator.delegate_to_invoice(invoice_id=43, task_description="process invoice B")
+            result = await orchestrator.delegate_to_fraud(vendor_id=3, task_description="check fraud for B")
+
+        assert "next_step" in result
+        assert "43" in result["next_step"]

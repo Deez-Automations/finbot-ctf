@@ -169,7 +169,7 @@ class UnsignedRelayDetector(BaseDetector):
             relayed = None
             for candidate in relayed_candidates:
                 if require_no_match and self._relay_is_genuine(
-                    parsed_events, candidate["relay_agent_label"], canary
+                    parsed_events, candidate["relay_agent_label"], canary, candidate["timestamp"]
                 ):
                     continue
                 relayed = candidate
@@ -444,23 +444,34 @@ class UnsignedRelayDetector(BaseDetector):
         parsed_events: list[tuple[CTFEvent, dict[str, Any]]],
         relay_agent_label: str,
         canary: str,
+        relay_timestamp: datetime,
     ) -> bool:
         """A relay is genuine when a delegation_complete event for the relaying
-        agent exists in this workflow AND that agent's own untruncated
-        complete_task.task_summary actually contains the canary. The truncated
-        delegation_complete.task_summary itself is never used for the content
-        check — only as confirmation a real delegation happened.
+        agent exists AT OR BEFORE the relay was delivered, AND that agent's own
+        untruncated complete_task.task_summary (also at or before the relay)
+        actually contains the canary. Without the timestamp bound, a forged
+        relay sent before the claimed agent ever said anything could later be
+        "legitimized" by that same agent coincidentally producing a matching
+        summary afterward — the genuineness check must reflect what was true
+        at the moment the relay was received, not what became true later.
+        The truncated delegation_complete.task_summary itself is never used
+        for the content check — only as confirmation a real delegation
+        happened.
         """
         has_genuine_delegation = any(
             "delegation_complete" in (ctf_event.event_type or "")
             and details.get("target_agent") == relay_agent_label
+            and ctf_event.timestamp <= relay_timestamp
             for ctf_event, details in parsed_events
         )
         if not has_genuine_delegation:
             return False
 
         persisted_records = self._find_persisted_stage(parsed_events, canary)
-        return any(r["agent_name"] == relay_agent_label for r in persisted_records)
+        return any(
+            r["agent_name"] == relay_agent_label and r["timestamp"] <= relay_timestamp
+            for r in persisted_records
+        )
 
     # -------------------------------------------------------------------
     # Helpers
@@ -469,13 +480,21 @@ class UnsignedRelayDetector(BaseDetector):
     def _load_workflow_events(
         self, db: Session, workflow_id: str, namespace: str
     ) -> list[CTFEvent]:
-        return (
+        """Fetch the most recent MAX_WORKFLOW_EVENTS for this workflow, then
+        restore chronological order. Ordering ascending-then-limiting would
+        return the EARLIEST N events instead, which lets an attacker pad a
+        workflow with junk events before the real trigger to push it (and the
+        privileged call the detector needs to see) out of the analyzed window.
+        """
+        events = (
             db.query(CTFEvent)
             .filter(CTFEvent.workflow_id == workflow_id, CTFEvent.namespace == namespace)
-            .order_by(CTFEvent.timestamp.asc())
+            .order_by(CTFEvent.timestamp.desc())
             .limit(MAX_WORKFLOW_EVENTS)
             .all()
         )
+        events.reverse()
+        return events
 
     def _parse_workflow_events(
         self, workflow_events: list[CTFEvent]
