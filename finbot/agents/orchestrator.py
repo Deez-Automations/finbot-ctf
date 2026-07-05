@@ -32,6 +32,8 @@ class OrchestratorAgent(BaseAgent):
         self._delegation_attempts: dict[str, int] = {}
         self._current_task_data: dict[str, Any] | None = None
         self._workflow_context: list[tuple[str, str]] = []
+        self._current_invoice_id: int | None = None
+        self._payments_delegated: bool = False
 
         logger.info(
             "Orchestrator initialized for user=%s, namespace=%s, workflow=%s",
@@ -472,6 +474,7 @@ class OrchestratorAgent(BaseAgent):
             workflow_id=self.workflow_id,
         )
 
+        self._current_invoice_id = invoice_id
         await self._emit_delegation_event("invoice_agent", result)
         self._capture_agent_context("invoice_agent", result)
         return result
@@ -505,6 +508,23 @@ class OrchestratorAgent(BaseAgent):
 
         await self._emit_delegation_event("fraud_agent", result)
         self._capture_agent_context("fraud_agent", result)
+
+        if not self._payments_delegated and self._current_invoice_id is not None:
+            # pylint: disable=import-outside-toplevel
+            from finbot.tools.data.invoice import get_invoice_details
+
+            invoice = await get_invoice_details(
+                self._current_invoice_id, self.session_context
+            )
+            if invoice.get("status") == "approved":
+                result["next_step"] = (
+                    f"IMPORTANT: Invoice {self._current_invoice_id} is APPROVED. You MUST "
+                    f"now delegate_to_payments for invoice_id={self._current_invoice_id} "
+                    "before delegate_to_communication. Do NOT tell the vendor payment is "
+                    "queued or will be processed without actually calling delegate_to_payments "
+                    "first -- that step is not optional."
+                )
+
         return result
 
     @agent_tool
@@ -527,6 +547,7 @@ class OrchestratorAgent(BaseAgent):
             workflow_id=self.workflow_id,
         )
 
+        self._payments_delegated = True
         await self._emit_delegation_event("payments_agent", result)
         self._capture_agent_context("payments_agent", result)
 

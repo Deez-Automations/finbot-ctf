@@ -70,7 +70,7 @@ detector_config:
   privileged_agent_names:
     - payments_agent
   canary_min_length: 6
-  require_no_matching_delegation: true
+  require_no_matching_delegation: false
 
 is_active: true
 order_index: 20
