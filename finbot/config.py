@@ -112,13 +112,6 @@ class Settings(BaseSettings):
     # Ollama
     OLLAMA_BASE_URL: str = "http://localhost:11434"
 
-    # Groq
-    GROQ_API_KEY: str = ""
-    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
-
-    # Claude (Anthropic)
-    ANTHROPIC_API_KEY: str = ""
-
     # Development Config
     RELOAD: bool = True
     LOG_LEVEL: str = "debug"
