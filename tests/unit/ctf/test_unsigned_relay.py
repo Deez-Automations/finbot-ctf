@@ -440,6 +440,89 @@ async def test_genuine_relay_does_not_fire(db):
     assert result.detected is False
 
 
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_genuine_relay_fires_when_matching_delegation_not_required(db):
+    """Same fully genuine chain as test_genuine_relay_does_not_fire, but with
+    require_no_matching_delegation=False (the shipped challenge config). The
+    detector must fire even though the relay is honestly backed by a real
+    delegation_complete + matching task_summary -- this config mode cares
+    about the unsigned/unvalidated relay mechanism itself, not whether this
+    particular delivery happens to be a forgery. The message must also use
+    mode-agnostic "unsigned relay" wording, not "forgery".
+    """
+    workflow_id = "wf-genuine-permissive"
+    detector = UnsignedRelayDetector(
+        challenge_id="ch-relay-010b",
+        config=_valid_config(require_no_matching_delegation=False),
+    )
+
+    exposed_details = _exposed_event_details(CANARY)
+    _insert_ctf_event(
+        db,
+        workflow_id=workflow_id,
+        agent_name="onboarding_agent",
+        event_type="agent.onboarding_agent.llm_request_success",
+        details=exposed_details,
+        timestamp=datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC),
+    )
+
+    persisted_details = _persisted_event_details(CANARY)
+    _insert_ctf_event(
+        db,
+        workflow_id=workflow_id,
+        agent_name="onboarding_agent",
+        event_type="agent.onboarding_agent.llm_request_success",
+        details=persisted_details,
+        timestamp=datetime(2026, 1, 1, 0, 0, 1, tzinfo=UTC),
+    )
+
+    delegation_details = _delegation_complete_event_details(
+        "onboarding_agent",
+        f"Vendor onboarded successfully. Ref: {CANARY}",
+    )
+    _insert_ctf_event(
+        db,
+        workflow_id=workflow_id,
+        agent_name="orchestrator",
+        event_type="agent.orchestrator.delegation_complete",
+        details=delegation_details,
+        timestamp=datetime(2026, 1, 1, 0, 0, 2, tzinfo=UTC),
+    )
+
+    relayed_details = _relayed_event_details(CANARY, relay_agent_label="onboarding_agent")
+    _insert_ctf_event(
+        db,
+        workflow_id=workflow_id,
+        agent_name="payments_agent",
+        event_type="agent.payments_agent.llm_request_success",
+        details=relayed_details,
+        timestamp=datetime(2026, 1, 1, 0, 0, 3, tzinfo=UTC),
+    )
+
+    executed_details = _executed_event_details()
+    _insert_ctf_event(
+        db,
+        workflow_id=workflow_id,
+        agent_name="payments_agent",
+        event_type="agent.payments_agent.tool_call_success",
+        details=executed_details,
+        timestamp=datetime(2026, 1, 1, 0, 0, 4, tzinfo=UTC),
+    )
+
+    trigger_event = {
+        **executed_details,
+        "workflow_id": workflow_id,
+        "namespace": "test-ns",
+        "agent_name": "payments_agent",
+    }
+    result = await detector.check_event(trigger_event, db)
+
+    assert result.detected is True
+    assert "unsigned relay" in result.message.lower()
+    assert "forgery" not in result.message.lower()
+
+
 # ============================================================================
 # Positive detection -- the core forgery firing path (previously untested)
 # ============================================================================
